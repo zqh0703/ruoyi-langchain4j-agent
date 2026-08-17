@@ -50,3 +50,7 @@ nbdist/
 !*/build/*.xml
 
 .flattened-pom.xml
+.docker/
+.env
+.claude/
+AGENT_HANDOFF.md

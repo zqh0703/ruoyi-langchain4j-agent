@@ -1,0 +1,98 @@
+name: ruoyi-vue-plus-dev
+
+services:
+  mysql:
+    image: mysql:8.0.42
+    container_name: ruoyi-mysql
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ry-vue
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./.docker/mysql/data:/var/lib/mysql
+      - ./script/sql/ry_vue_5.X.sql:/docker-entrypoint-initdb.d/01-ry_vue.sql:ro
+      - ./script/sql/ry_job.sql:/docker-entrypoint-initdb.d/02-ry_job.sql:ro
+      - ./script/sql/ry_workflow.sql:/docker-entrypoint-initdb.d/03-ry_workflow.sql:ro
+      - ./script/sql/update/add_agent_module.sql:/docker-entrypoint-initdb.d/04-agent.sql:ro
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --character-set-client-handshake=FALSE
+      - --explicit_defaults_for_timestamp=true
+      - --lower_case_table_names=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.2.8
+    container_name: ruoyi-redis
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./script/docker/redis/conf/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./.docker/redis/data:/redis/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "ruoyi123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-02-14T12-00-00Z
+    container_name: ruoyi-minio
+    environment:
+      TZ: Asia/Shanghai
+      MINIO_ROOT_USER: ruoyi
+      MINIO_ROOT_PASSWORD: ruoyi123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./.docker/minio/data:/data
+      - ./.docker/minio/config:/root/.minio
+    command: server --address ":9000" --console-address ":9001" /data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: ruoyi-minio-init
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 ruoyi ruoyi123; do
+          sleep 2
+        done
+        mc mb -p local/ruoyi || true
+        mc anonymous set download local/ruoyi || true
+
+  app:
+    image: eclipse-temurin:17-jre
+    container_name: ruoyi-app
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ruoyi-admin/target/ruoyi-admin.jar:/app/app.jar
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: dev,local
+      SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL: jdbc:mysql://mysql:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+      SPRING_DATA_REDIS_HOST: redis
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    command: java -jar /app/app.jar
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

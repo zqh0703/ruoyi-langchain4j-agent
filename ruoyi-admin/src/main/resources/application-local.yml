@@ -1,0 +1,17 @@
+spring:
+  boot:
+    admin:
+      client:
+        enabled: false
+
+snail-job:
+  enabled: false
+
+agent:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: https://api.deepseek.com/v1
+    default-model: deepseek-v4-pro
+    temperature: 0.70
+    max-tokens: 2048
+    timeout: 60s
