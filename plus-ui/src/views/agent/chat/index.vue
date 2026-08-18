@@ -60,6 +60,7 @@
                 </div>
                 <div class="message-bubble markdown-body" v-html="renderMarkdown(message.content)"></div>
                 <div v-if="message.role === 'tool' && message.toolResult" class="tool-result">{{ message.toolResult }}</div>
+                <AgentActionCard v-if="getActionForMessage(message)" :action="getActionForMessage(message)!" @changed="handleActionChanged" />
               </div>
             </article>
             <article v-if="sending" class="message-row assistant">
@@ -109,11 +110,15 @@ import { listAgentConfig } from '@/api/agent/config';
 import { AgentConfigVO } from '@/api/agent/config/types';
 import { createAgentSession, listAgentMessages, listAgentSessions, sendAgentMessage } from '@/api/agent/chat';
 import { AgentMessageVO, AgentSessionVO } from '@/api/agent/chat/types';
+import { listAgentActions } from '@/api/agent/action';
+import { AgentActionVO } from '@/api/agent/action/types';
+import AgentActionCard from './components/AgentActionCard.vue';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const agentList = ref<AgentConfigVO[]>([]);
 const sessionList = ref<AgentSessionVO[]>([]);
 const messageList = ref<AgentMessageVO[]>([]);
+const actionList = ref<AgentActionVO[]>([]);
 const selectedAgentId = ref<number>();
 const selectedSessionId = ref<number>();
 const sessionLoading = ref(false);
@@ -156,6 +161,26 @@ const getSessions = async () => {
   }
 };
 
+const getActions = async () => {
+  if (!selectedSessionId.value) {
+    actionList.value = [];
+    return;
+  }
+  const res = await listAgentActions(selectedSessionId.value);
+  actionList.value = res.data;
+};
+
+const getActionForMessage = (message: AgentMessageVO) =>
+  actionList.value.find(
+    (action) =>
+      (message.actionRequestId && String(action.id) === String(message.actionRequestId)) ||
+      (action.toolMessageId && String(action.toolMessageId) === String(message.id))
+  );
+
+const handleActionChanged = (changed: AgentActionVO) => {
+  const index = actionList.value.findIndex((action) => String(action.id) === String(changed.id));
+  if (index >= 0) actionList.value[index] = changed;
+};
 const getMessages = async () => {
   if (!selectedSessionId.value) {
     messageList.value = [];
@@ -165,6 +190,7 @@ const getMessages = async () => {
   try {
     const res = await listAgentMessages(selectedSessionId.value);
     messageList.value = res.data;
+    await getActions();
     await scrollToBottom();
   } finally {
     messageLoading.value = false;
@@ -174,6 +200,7 @@ const getMessages = async () => {
 const handleAgentChange = async () => {
   selectedSessionId.value = undefined;
   messageList.value = [];
+  actionList.value = [];
   await getSessions();
   if (sessionList.value.length) await handleSelectSession(sessionList.value[0].id);
 };
@@ -192,6 +219,7 @@ const createSession = async () => {
   selectedSessionId.value = res.data.id;
   sessionList.value.unshift(res.data);
   messageList.value = [];
+  actionList.value = [];
 };
 
 const handleCreateSession = async () => {

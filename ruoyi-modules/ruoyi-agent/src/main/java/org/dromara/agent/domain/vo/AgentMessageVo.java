@@ -22,6 +22,7 @@ public class AgentMessageVo implements Serializable {
     private Long sessionId;
     private Long agentId;
     private Long runLogId;
+    private Long actionRequestId;
     private String role;
     private String content;
     private String toolName;

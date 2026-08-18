@@ -28,6 +28,8 @@ public class AgentMessage extends TenantEntity {
 
     private Long runLogId;
 
+    private Long actionRequestId;
+
     /** user, assistant, tool or system. */
     private String role;
 

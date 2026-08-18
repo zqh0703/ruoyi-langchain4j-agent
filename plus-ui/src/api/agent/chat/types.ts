@@ -10,6 +10,7 @@ export interface AgentMessageVO extends BaseEntity {
   id: number;
   sessionId: number;
   runLogId?: string | number;
+  actionRequestId?: string | number;
   agentId: number;
   role: 'user' | 'assistant' | 'tool';
   content: string;

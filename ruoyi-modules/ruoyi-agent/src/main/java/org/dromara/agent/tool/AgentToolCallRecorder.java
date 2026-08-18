@@ -3,8 +3,10 @@ package org.dromara.agent.tool;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.agent.action.AgentInvocationContext;
 import org.dromara.agent.domain.AgentMessage;
 import org.dromara.agent.mapper.AgentMessageMapper;
+import org.dromara.agent.service.AgentActionService;
 import org.dromara.common.json.utils.JsonUtils;
 import org.dromara.common.satoken.utils.LoginHelper;
 import org.springframework.stereotype.Component;
@@ -21,35 +23,41 @@ import java.util.function.Supplier;
 public class AgentToolCallRecorder {
 
     private final AgentMessageMapper agentMessageMapper;
-    private final ThreadLocal<ExecutionContext> contextHolder = new ThreadLocal<>();
+    private final AgentInvocationContext invocationContext;
+    private final AgentActionService actionService;
 
     public Scope open(Long sessionId, Long agentId, Long runLogId) {
-        ExecutionContext previous = contextHolder.get();
-        contextHolder.set(new ExecutionContext(sessionId, agentId, runLogId));
-        return () -> {
-            if (previous == null) {
-                contextHolder.remove();
-            } else {
-                contextHolder.set(previous);
-            }
-        };
+        AgentInvocationContext.Scope scope = invocationContext.open(sessionId, agentId, runLogId);
+        return scope::close;
     }
 
     public String record(String toolName, Map<String, Object> arguments, Supplier<String> execution) {
+        return recordInternal(toolName, arguments, null, execution);
+    }
+
+    public String recordAction(
+        String toolName, Map<String, Object> arguments, Long actionRequestId, Supplier<String> execution
+    ) {
+        return recordInternal(toolName, arguments, actionRequestId, execution);
+    }
+
+    private String recordInternal(
+        String toolName, Map<String, Object> arguments, Long actionRequestId, Supplier<String> execution
+    ) {
         long startedAt = System.currentTimeMillis();
         try {
             String result = execution.get();
-            persist(toolName, arguments, result, System.currentTimeMillis() - startedAt, null);
+            persist(toolName, arguments, actionRequestId, result, System.currentTimeMillis() - startedAt, null);
             return result;
         } catch (RuntimeException error) {
-            persist(toolName, arguments, null, System.currentTimeMillis() - startedAt, error);
+            persist(toolName, arguments, actionRequestId, null, System.currentTimeMillis() - startedAt, error);
             throw error;
         }
     }
 
-    private void persist(String toolName, Map<String, Object> arguments, String result,
+    private void persist(String toolName, Map<String, Object> arguments, Long actionRequestId, String result,
                          long durationMs, RuntimeException error) {
-        ExecutionContext context = contextHolder.get();
+        AgentInvocationContext.Context context = invocationContext.current();
         if (context == null) {
             log.debug("Skipping tool trace outside an Agent conversation: {}", toolName);
             return;
@@ -60,6 +68,7 @@ public class AgentToolCallRecorder {
             message.setSessionId(context.sessionId());
             message.setAgentId(context.agentId());
             message.setRunLogId(context.runLogId());
+            message.setActionRequestId(actionRequestId);
             message.setRole("tool");
             message.setContent(error == null
                 ? "Tool completed in " + durationMs + " ms."
@@ -80,6 +89,8 @@ public class AgentToolCallRecorder {
             message.setCreateDept(LoginHelper.getDeptId());
             if (agentMessageMapper.insert(message) <= 0) {
                 log.error("Failed to persist Agent tool trace: {}", toolName);
+            } else if (actionRequestId != null) {
+                actionService.linkToolMessage(actionRequestId, message.getId());
             }
         } catch (RuntimeException persistenceError) {
             log.error("Failed to persist Agent tool trace: {}", toolName, persistenceError);
@@ -92,9 +103,6 @@ public class AgentToolCallRecorder {
             return error.getClass().getSimpleName();
         }
         return message.length() > 2000 ? message.substring(0, 2000) : message;
-    }
-
-    private record ExecutionContext(Long sessionId, Long agentId, Long runLogId) {
     }
 
     @FunctionalInterface

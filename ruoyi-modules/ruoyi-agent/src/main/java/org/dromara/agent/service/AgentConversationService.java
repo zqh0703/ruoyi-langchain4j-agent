@@ -61,6 +61,7 @@ public class AgentConversationService {
     private final DeepSeekChatModelFactory deepSeekChatModelFactory;
     private final AgentToolRegistry agentToolRegistry;
     private final AgentToolCallRecorder agentToolCallRecorder;
+    private final AgentActionService agentActionService;
 
     /**
      * Creates a conversation session for the current user.
@@ -115,7 +116,7 @@ public class AgentConversationService {
 
         try {
             AgentMessage userMessage = saveMessage(session, "user", bo.getMessage(), runLog.getId());
-            AgentAssistant assistant = buildAssistant(agentConfig, userMessage.getId());
+            AgentAssistant assistant = buildAssistant(agentConfig, userMessage.getId(), session.getId());
             String answer;
             try (AgentToolCallRecorder.Scope ignored = agentToolCallRecorder.open(
                 session.getId(), agentConfig.getId(), runLog.getId())) {
@@ -172,27 +173,35 @@ public class AgentConversationService {
         return agentToolRegistry.listAvailableTools();
     }
 
-    private AgentAssistant buildAssistant(AgentConfig agentConfig, Long currentUserMessageId) {
+    private AgentAssistant buildAssistant(AgentConfig agentConfig, Long currentUserMessageId, Long sessionId) {
         List<Object> enabledTools = "1".equals(agentConfig.getEnableTool())
             ? agentToolRegistry.resolveEnabledTools(agentConfig.getId())
             : List.of();
-        String systemPrompt = buildSystemPrompt(agentConfig, !enabledTools.isEmpty());
         var builder = AiServices.builder(AgentAssistant.class)
             .chatModel(deepSeekChatModelFactory.create(agentConfig))
             .chatMemoryProvider(memoryId -> restoreMemory(Long.valueOf(memoryId.toString()), currentUserMessageId))
-            .systemMessageProvider(memoryId -> systemPrompt);
+            .systemMessageProvider(memoryId -> buildSystemPrompt(agentConfig, !enabledTools.isEmpty(), sessionId));
         if (!enabledTools.isEmpty()) {
             builder.tools(enabledTools.toArray());
         }
         return builder.build();
     }
 
-    private String buildSystemPrompt(AgentConfig agentConfig, boolean toolsEnabled) {
+    private String buildSystemPrompt(AgentConfig agentConfig, boolean toolsEnabled, Long sessionId) {
         String rolePrompt = StringUtils.isNotBlank(agentConfig.getSystemPrompt())
             ? agentConfig.getSystemPrompt() : DEFAULT_ROLE_PROMPT;
         String toolInstruction = toolsEnabled
-            ? "Business tools are enabled. Use them only when they are necessary to answer the user's request."
+            ? "Business tools are enabled. Read tools return facts immediately. Write tools only create proposals; "
+                + "never claim a proposed action succeeded until it appears in confirmed operations. "
+                + "Before creating a user or changing roles, use system_role_search when the requested exact role "
+                + "is unknown or not found. Present the available roles and ask the user to choose; never substitute "
+                + "a privileged role or invent a role ID."
             : "Business tools are disabled. Do not claim that you queried system data or executed a tool.";
+        List<String> confirmedActions = agentActionService.recentSuccessfulSummaries(sessionId);
+        String confirmedActionContext = confirmedActions.isEmpty()
+            ? "- None"
+            : confirmedActions.stream().map(summary -> "- " + summary)
+                .collect(java.util.stream.Collectors.joining("\n"));
         return """
             You are %s, an AI project assistant.
 
@@ -209,6 +218,9 @@ public class AgentConversationService {
             - Clearly distinguish confirmed facts from suggestions.
             - %s
 
+            Confirmed write operations in this conversation (authoritative, sanitized):
+            %s
+
             Project-specific responsibilities:
             %s
             """.formatted(
@@ -217,6 +229,7 @@ public class AgentConversationService {
             agentConfig.getModelName(),
             toolsEnabled ? "enabled" : "disabled",
             toolInstruction,
+            confirmedActionContext,
             rolePrompt
         );
     }
