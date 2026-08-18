@@ -79,6 +79,7 @@ public class SysUserServiceImpl implements ISysUserService, UserService {
             .like(StringUtils.isNotBlank(user.getPhonenumber()), "u.phonenumber", user.getPhonenumber())
             .between(params.get("beginTime") != null && params.get("endTime") != null,
                 "u.create_time", params.get("beginTime"), params.get("endTime"))
+            .eq(ObjectUtil.isNotNull(user.getExactDeptId()), "u.dept_id", user.getExactDeptId())
             .and(ObjectUtil.isNotNull(user.getDeptId()), w -> {
                 List<Long> deptIds = deptMapper.selectDeptAndChildById(user.getDeptId());
                 w.in("u.dept_id", deptIds);
@@ -92,12 +93,17 @@ public class SysUserServiceImpl implements ISysUserService, UserService {
         wrapper.eq(SysUser::getDelFlag, SystemConstants.NORMAL)
             .eq(ObjectUtil.isNotNull(user.getUserId()), SysUser::getUserId, user.getUserId())
             .in(StringUtils.isNotBlank(user.getUserIds()), SysUser::getUserId, StringUtils.splitTo(user.getUserIds(), Convert::toLong))
+            .and(StringUtils.isNotBlank(user.getKeyword()), keyword -> keyword
+                .like(SysUser::getUserName, user.getKeyword())
+                .or()
+                .like(SysUser::getNickName, user.getKeyword()))
             .like(StringUtils.isNotBlank(user.getUserName()), SysUser::getUserName, user.getUserName())
             .like(StringUtils.isNotBlank(user.getNickName()), SysUser::getNickName, user.getNickName())
             .eq(StringUtils.isNotBlank(user.getStatus()), SysUser::getStatus, user.getStatus())
             .like(StringUtils.isNotBlank(user.getPhonenumber()), SysUser::getPhonenumber, user.getPhonenumber())
             .between(params.get("beginTime") != null && params.get("endTime") != null,
                 SysUser::getCreateTime, params.get("beginTime"), params.get("endTime"))
+            .eq(ObjectUtil.isNotNull(user.getExactDeptId()), SysUser::getDeptId, user.getExactDeptId())
             .and(ObjectUtil.isNotNull(user.getDeptId()), w -> {
                 List<Long> ids = deptMapper.selectDeptAndChildById(user.getDeptId());
                 w.in(SysUser::getDeptId, ids);

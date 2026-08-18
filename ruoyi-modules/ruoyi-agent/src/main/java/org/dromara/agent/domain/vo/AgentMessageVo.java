@@ -27,6 +27,7 @@ public class AgentMessageVo implements Serializable {
     private String toolName;
     private String toolArgs;
     private String toolResult;
+    private String toolStatus;
     private Long toolDurationMs;
     private Integer promptTokens;
     private Integer completionTokens;

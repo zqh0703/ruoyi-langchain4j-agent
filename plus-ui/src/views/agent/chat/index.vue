@@ -58,7 +58,7 @@
                   {{ message.role === 'user' ? '你' : message.role === 'tool' ? message.toolName || '业务工具' : selectedAgent?.agentName }}
                   <span>{{ proxy?.parseTime(message.createTime, '{h}:{i}:{s}') }}</span>
                 </div>
-                <div class="message-bubble">{{ message.content }}</div>
+                <div class="message-bubble markdown-body" v-html="renderMarkdown(message.content)"></div>
                 <div v-if="message.role === 'tool' && message.toolResult" class="tool-result">{{ message.toolResult }}</div>
               </div>
             </article>
@@ -103,6 +103,8 @@
 </template>
 
 <script setup name="AgentChat" lang="ts">
+import DOMPurify from 'dompurify';
+import MarkdownIt from 'markdown-it';
 import { listAgentConfig } from '@/api/agent/config';
 import { AgentConfigVO } from '@/api/agent/config/types';
 import { createAgentSession, listAgentMessages, listAgentSessions, sendAgentMessage } from '@/api/agent/chat';
@@ -119,6 +121,15 @@ const messageLoading = ref(false);
 const sending = ref(false);
 const inputMessage = ref('');
 const messageContainerRef = ref<HTMLElement>();
+
+const markdown = new MarkdownIt({
+  breaks: true,
+  html: false,
+  linkify: true,
+  typographer: false
+});
+
+const renderMarkdown = (content: string) => DOMPurify.sanitize(markdown.render(content || ''));
 
 const selectedAgent = computed(() => agentList.value.find((agent) => agent.id === selectedAgentId.value));
 
@@ -429,6 +440,79 @@ h2 {
   background: var(--el-bg-color);
   color: var(--el-text-color-primary);
   box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
+}
+
+.message-bubble.markdown-body {
+  overflow-x: auto;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.markdown-body :deep(p) {
+  margin: 0 0 10px;
+}
+
+.markdown-body :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-body :deep(table) {
+  width: max-content;
+  min-width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 7px 10px;
+  border: 1px solid var(--el-border-color);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.markdown-body :deep(th) {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.markdown-body :deep(pre) {
+  overflow-x: auto;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: var(--el-fill-color-darker);
+  font-family: Consolas, 'Courier New', monospace;
+  line-height: 1.5;
+}
+
+.markdown-body :deep(code) {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--el-fill-color-light);
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.markdown-body :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body :deep(a) {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.markdown-body :deep(a:hover) {
+  text-decoration: underline;
 }
 
 .message-row.user .message-bubble {

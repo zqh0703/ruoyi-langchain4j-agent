@@ -17,6 +17,7 @@ export interface AgentMessageVO extends BaseEntity {
   toolArgs: string;
   toolDurationMs?: number;
   toolResult: string;
+  toolStatus?: 'SUCCESS' | 'FAILED';
   promptTokens: number;
   completionTokens: number;
   seq: number;

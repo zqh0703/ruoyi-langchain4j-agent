@@ -67,6 +67,7 @@ public class AgentToolCallRecorder {
             message.setToolName(toolName);
             message.setToolArgs(JsonUtils.toJsonString(arguments));
             message.setToolResult(error == null ? result : safeMessage(error));
+            message.setToolStatus(error == null ? "SUCCESS" : "FAILED");
             message.setToolDurationMs(durationMs);
             message.setPromptTokens(0);
             message.setCompletionTokens(0);

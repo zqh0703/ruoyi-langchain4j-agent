@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 /**
  * The first business tool exposed during incremental Agent development.
@@ -18,12 +19,14 @@ public class SystemUserCountTool implements AgentToolProvider {
 
     private final SystemAgentTools systemAgentTools;
     private final AgentToolCallRecorder toolCallRecorder;
+    private final AgentToolGuard toolGuard;
 
     @Tool(
         name = TOOL_CODE,
         value = "Count active, non-deleted users in the current tenant. Use this tool instead of guessing the count."
     )
     public String countNormalUsers() {
+        toolGuard.check(this);
         String result = toolCallRecorder.record(TOOL_CODE, Map.of(), systemAgentTools::systemUserCount);
         log.info("Agent tool executed: system_user_count, result={}", result);
         return result;
@@ -32,6 +35,11 @@ public class SystemUserCountTool implements AgentToolProvider {
     @Override
     public String toolCode() {
         return TOOL_CODE;
+    }
+
+    @Override
+    public List<String> requiredPermissions() {
+        return List.of("system:user:list");
     }
 
 }

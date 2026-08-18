@@ -23,13 +23,16 @@ public class AgentToolRegistry {
 
     private final AgentToolDefinitionMapper definitionMapper;
     private final AgentConfigToolMapper configToolMapper;
+    private final AgentToolGuard toolGuard;
     private final Map<String, AgentToolProvider> providerByCode;
 
     public AgentToolRegistry(AgentToolDefinitionMapper definitionMapper,
                              AgentConfigToolMapper configToolMapper,
+                             AgentToolGuard toolGuard,
                              List<AgentToolProvider> providers) {
         this.definitionMapper = definitionMapper;
         this.configToolMapper = configToolMapper;
+        this.toolGuard = toolGuard;
         Map<String, AgentToolProvider> providerMap = new LinkedHashMap<>();
         for (AgentToolProvider provider : providers) {
             AgentToolProvider previous = providerMap.putIfAbsent(provider.toolCode(), provider);
@@ -59,6 +62,7 @@ public class AgentToolRegistry {
             ).stream()
             .map(definition -> findProvider(definition.getToolCode()))
             .filter(Objects::nonNull)
+            .filter(this::isAllowed)
             .map(AgentToolProvider::toolInstance)
             .toList();
     }
@@ -69,9 +73,20 @@ public class AgentToolRegistry {
                     .eq(AgentToolDefinition::getStatus, "0")
                     .orderByAsc(AgentToolDefinition::getId)
             ).stream()
-            .filter(definition -> providerByCode.containsKey(definition.getToolCode()))
+            .filter(definition -> {
+                AgentToolProvider provider = findProvider(definition.getToolCode());
+                return provider != null && isAllowed(provider);
+            })
             .map(definition -> new AgentToolVo(definition.getToolCode(), definition.getDescription()))
             .toList();
+    }
+
+    private boolean isAllowed(AgentToolProvider provider) {
+        boolean allowed = toolGuard.isAllowed(provider);
+        if (!allowed) {
+            log.debug("Agent tool hidden because the operator lacks permission: {}", provider.toolCode());
+        }
+        return allowed;
     }
 
     private AgentToolProvider findProvider(String toolCode) {

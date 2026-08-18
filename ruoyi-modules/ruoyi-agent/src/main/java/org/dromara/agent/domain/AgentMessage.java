@@ -39,6 +39,8 @@ public class AgentMessage extends TenantEntity {
 
     private String toolResult;
 
+    private String toolStatus;
+
     private Long toolDurationMs;
 
     private Integer promptTokens;

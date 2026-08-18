@@ -35,6 +35,16 @@ public class SysUserBo extends BaseEntity {
     private Long deptId;
 
     /**
+     * Exact department filter that does not include child departments.
+     */
+    private Long exactDeptId;
+
+    /**
+     * Optional username or nickname keyword used by combined searches.
+     */
+    private String keyword;
+
+    /**
      * 用户账号
      */
     @Xss(message = "用户账号不能包含脚本字符")
